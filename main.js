@@ -1,23 +1,26 @@
-// =========================
-// 📁 main.js (FINAL VERSION)
-// =========================
 require("dotenv").config()
-
 const express = require("express")
 const cors = require("cors")
 const helmet = require("helmet")
 const rateLimit = require("express-rate-limit")
+const cookieParser = require("cookie-parser")
 const multer = require("multer")
+const knex = require("knex")
 const xlsx = require("xlsx")
-const fs = require("fs")
-const path = require("path")
-const bcrypt = require("bcryptjs")
-const jwt = require("jsonwebtoken")
 
-// Global variable
-global.app = express()
-global.upload = multer()
-global.knex = require("knex")({
+const app = express()
+const upload = multer()
+console.log("🚀 File main.js berhasil dieksekusi sampai atas")
+
+app.use((req, res, next) => {
+  console.log("➡️  Request masuk:", req.method, req.url)
+  next()
+})
+
+// =========================
+// 🛢️ Database
+// =========================
+const db = knex({
   client: "mysql2",
   connection: {
     host: process.env.host,
@@ -28,58 +31,73 @@ global.knex = require("knex")({
   },
 })
 
+global.knex = db;
+
+db.raw("SELECT 1")
+  .then(() => console.log("✅ MySQL Connected"))
+  .catch((err) => {
+    console.error("❌ MySQL Connection Failed:", err.message)
+    process.exit(1)
+  })
+
 // =========================
-// 🛡️ Basic Security Middlewares
+// ⚙️ Middlewares
 // =========================
 app.use(
   cors({
-    origin: ["http://localhost:3000"], // ganti ke domain frontend kamu di produksi
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    origin:
+      process.env.NODE_ENV === "production"
+        ? "https://finance.rsbhayangkara.id"
+        : "http://127.0.0.1:3000",
     credentials: true,
   })
 )
+app.use(cookieParser())
 app.use(express.json())
-app.use(helmet())
+app.use(
+  helmet({
+    crossOriginOpenerPolicy: false,
+    crossOriginResourcePolicy: false,
+    contentSecurityPolicy: false,
+    originAgentCluster: false,
+  })
+)
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 300, // max 300 request per 15 menit
+    max: 300,
   })
 )
 
 // =========================
-// 🔐 Load Middleware VerifyToken
+// 🔐 Middlewares
 // =========================
-const {
-  verifyToken
-} = require("./middlewares/verifyToken")
+const { verifyToken } = require("./middlewares/verifyToken")
 
 // =========================
-// 🧑‍💻 Load Modules
+// 🧩 Register routes properly
 // =========================
-// 📌 Routes user (register, login, logout, etc.) tetap public
-require("./moduls/users")
+const userRoutes = require("./moduls/auth/users")
+const incomeRoutes = require("./moduls/income")
+const spendingRoutes = require("./moduls/spending")
+// const contentRoutes = require("./moduls/content")
 
-// 📌 Semua route yang diawali /api akan diproteksi JWT secara global
-app.use("/api", verifyToken)
-
-// 📌 Load API modules setelah middleware
-require("./moduls/income")
-require("./moduls/spending")
-require("./moduls/content")
+app.use("/", userRoutes)
+app.use("/api", verifyToken, incomeRoutes)
+app.use("/api", verifyToken, spendingRoutes)
+// app.use("/api", verifyToken, contentRoutes)
 
 // =========================
-// ✅ Default Route (Health Check)
+// 🩺 Default Route
 // =========================
 app.get("/", (req, res) => {
-  res.status(200).json({
-    message: "🚀 Backend API running..."
-  })
+  res.status(200).json({ message: "🚀 Backend API running..." })
 })
 
-// ✅ 404 Handler (jika route tidak ditemukan)
-app.use((req, res, next) => {
+// =========================
+// ❌ 404 + Error Handler
+// =========================
+app.use((req, res) => {
   res.status(404).json({
     success: false,
     error: "Route not found",
@@ -88,29 +106,12 @@ app.use((req, res, next) => {
   })
 })
 
-
-// ✅ Global Error Handler
-app.use((err, req, res, next) => {
-  console.error("🔥 Global Error:", err)
-
-  // Kalau error sudah punya statusCode → pakai itu
-  const status = err.statusCode || 500
-  const message = err.message || "Internal Server Error"
-
-  res.status(status).json({
-    success: false,
-    error: message,
-    path: req.originalUrl,
-    method: req.method,
-    timestamp: new Date().toISOString(),
-  })
-})
-
-
 // =========================
-// ✅ Start Server
+// 🚀 Start Server
 // =========================
-const PORT = process.env.PORT || 3003
-app.listen(PORT, () => {
-  console.log(`✅ Server jalan di http://localhost:${PORT}`)
+const PORT = process.env.PORT || 3100
+app.listen(PORT, "127.0.0.1", () => {
+  console.log(`✅ Server jalan di http://127.0.0.1:${PORT}`)
 })
+console.log("🚀 Sampai bawah nih, app.listen dieksekusi")
+module.exports = app
