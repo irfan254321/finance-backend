@@ -5,7 +5,6 @@ const express = require("express")
 const router = express.Router()
 const XLSX = require("xlsx")
 const upload = require("../middlewares/uploads")
-const { verifyToken, isAdmin } = require("../middlewares/verifyToken")
 
 function excelDateToJSDate(serial) {
   if (!serial || isNaN(serial)) return serial
@@ -16,7 +15,7 @@ function excelDateToJSDate(serial) {
 }
 
 // ✅ GET: Semua spending berdasarkan tahun (public dashboard)
-router.get("/spending/:year", async (req, res) => {
+router.get("/spending/:year", async (req, res, next) => {
   try {
     const year = req.params.year
     const results = await knex("detail_spending")
@@ -26,24 +25,22 @@ router.get("/spending/:year", async (req, res) => {
 
     res.status(200).json(results)
   } catch (err) {
-    console.error("Error GET /api/spending/:year:", err)
-    res.status(500).json({ error: err.message })
+    next(err)
   }
 })
 
 // ✅ GET: Semua spending (tanpa filter)
-router.get("/spending", async (req, res) => {
+router.get("/spending", async (req, res, next) => {
   try {
     const results = await knex("detail_spending").select("*").orderBy("date_spending", "desc")
     res.status(200).json(results)
   } catch (err) {
-    console.error("Error GET /api/spending:", err)
-    res.status(500).json({ error: err.message })
+    next(err)
   }
 })
 
 // ✅ GET: Semua kategori spending (public)
-router.get("/inputCategorySpending", async (req, res) => {
+router.get("/CategorySpending", async (req, res, next) => {
   try {
     const results = await knex("category_spending").select("*").orderBy("id", "asc")
     res.status(200).json(results)
@@ -54,7 +51,7 @@ router.get("/inputCategorySpending", async (req, res) => {
 })
 
 // ✅ GET: Semua supplier (public, bisa dipakai dropdown)
-router.get("/inputCompanyMedicine", async (req, res) => {
+router.get("/CompanyMedicine", async (req, res, next) => {
   try {
     const { page, limit, search } = req.query
     let query = knex("company_medicine").select("*")
@@ -72,26 +69,24 @@ router.get("/inputCompanyMedicine", async (req, res) => {
     const results = await query.orderBy("id", "desc")
     res.status(200).json(results)
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: "Internal Server Error" })
+    next(err)
   }
 })
 
 // ✅ GET: Semua unit obat (public)
-router.get("/unitMedicine", async (req, res) => {
+router.get("/unitMedicine", async (req, res, next) => {
   try {
     const rows = await knex("unit_medicine").select("*").orderBy("id", "asc")
     res.status(200).json(rows)
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: "Internal Server Error" })
+    next(err)
   }
 })
 
 // ==========================================
 // 📊 POST: Spending per kategori per tahun
 // ==========================================
-router.post("/spendingCategoryYear", async (req, res) => {
+router.post("/spendingCategoryYear", async (req, res, next) => {
   try {
     const { category_id, year } = req.body
     if (!category_id || !year) return res.status(400).send("Category ID or Year is Undefined!")
@@ -105,15 +100,14 @@ router.post("/spendingCategoryYear", async (req, res) => {
 
     res.status(200).json(results)
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: "Internal Server Error" })
+    next(err)
   }
 })
 
 // ==========================================
 // 📅 POST: Spending per kategori per bulan
 // ==========================================
-router.post("/spendingDetail", async (req, res) => {
+router.post("/spendingDetail", async (req, res, next) => {
   try {
     const { category_id, month, year } = req.body
     if (!category_id || !month || !year)
@@ -129,15 +123,14 @@ router.post("/spendingDetail", async (req, res) => {
 
     res.status(200).json(results)
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: "Internal Server Error" })
+    next(err)
   }
 })
 
 // ==========================================
 // 🧾 POST: Input spending baru (login required)
 // ==========================================
-router.post("/inputSpendingDetail", verifyToken, async (req, res) => {
+router.post("/inputSpendingDetail", async (req, res, next) => {
   const trx = await knex.transaction()
   try {
     const { name_spending, amount_spending, category_id, date_spending, company_id, medicines } = req.body
@@ -195,15 +188,14 @@ router.post("/inputSpendingDetail", verifyToken, async (req, res) => {
     res.status(200).json({ message: "✅ Spending inserted successfully" })
   } catch (err) {
     await trx.rollback()
-    console.error(err)
-    res.status(500).json({ error: "Internal Server Error" })
+    next(err)
   }
 })
 
 // ==========================================
 // 📤 POST: Upload spending Excel (login required)
 // ==========================================
-router.post("/uploadSpendingExcelGeneral", verifyToken, upload.single("file"), async (req, res) => {
+router.post("/uploadSpendingExcelGeneral", upload.single("file"), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).send("No file uploaded")
 
@@ -249,15 +241,14 @@ router.post("/uploadSpendingExcelGeneral", verifyToken, upload.single("file"), a
       inserted_spending,
     })
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: "Internal Server Error" })
+    next(err)
   }
 })
 
 // ==========================================
 // 📤 POST: Upload spending OBAT (login required)
 // ==========================================
-router.post("/uploadSpendingExcelObat", verifyToken, upload.single("file"), async (req, res) => {
+router.post("/uploadSpendingExcelObat", upload.single("file"), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).send("No file uploaded")
     const wb = XLSX.read(req.file.buffer, { type: "buffer", cellDates: true })
@@ -350,15 +341,14 @@ router.post("/uploadSpendingExcelObat", verifyToken, upload.single("file"), asyn
       inserted_medicines,
     })
   } catch (err) {
-    console.error("uploadSpendingExcelObat error:", err)
-    res.status(500).json({ error: "Internal Server Error" })
+    next(err)
   }
 })
 
 // ==========================================
 // 💊 POST: Ambil detail obat berdasarkan spending_id
 // ==========================================
-router.post("/spendingMedicineBySpendingId", async (req, res) => {
+router.post("/spendingMedicineBySpendingId", async (req, res, next) => {
   try {
     const { detail_spending_id } = req.body
     if (!detail_spending_id)
@@ -380,10 +370,59 @@ router.post("/spendingMedicineBySpendingId", async (req, res) => {
 
     res.status(200).json(medicines)
   } catch (err) {
-    console.error("Error POST /api/spendingMedicineBySpendingId:", err)
-    res.status(500).json({ error: "Internal Server Error" })
+    next(err)
   }
 })
 
+router.post("/inputCompanyMedicine", async (req, res, next) => {
+  try {
+    const { name_company } = req.body
+    const userId = req.user.id
+
+    if (!name_company || !name_company.trim())
+      return res.status(400).json({ error: "Nama perusahaan wajib diisi" })
+
+    const [inserted] = await knex("company_medicine").insert({
+      name_company: name_company.trim(),
+      created_by: userId,
+      created_at: knex.fn.now(),
+    })
+
+    res.status(200).json({ message: "✅ Perusahaan baru berhasil ditambahkan", id: inserted })
+  } catch (err) {
+    next(err)
+  }
+})
+
+router.post("/inputCategorySpending", async (req, res, next) => {
+  try {
+    const { name_category } = req.body
+    const userId = req.user?.id || null // kalau pakai verifyToken global, ini aman
+
+    if (!name_category || !name_category.trim()) {
+      return res.status(400).json({ error: "Nama kategori wajib diisi" })
+    }
+
+    const existing = await knex("category_spending")
+      .where("name_category", name_category.trim())
+      .first()
+    if (existing) {
+      return res.status(400).json({ error: "Kategori sudah ada" })
+    }
+
+    const [inserted] = await knex("category_spending").insert({
+      name_category: name_category.trim(),
+      created_by: userId,
+      created_at: knex.fn.now(),
+    })
+
+    res.status(200).json({
+      message: "✅ Kategori spending baru berhasil disimpan!",
+      id: inserted,
+    })
+  } catch (err) {
+    next(err)
+  }
+})
 
 module.exports = router

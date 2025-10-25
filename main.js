@@ -7,15 +7,30 @@ const cookieParser = require("cookie-parser")
 const multer = require("multer")
 const knex = require("knex")
 const xlsx = require("xlsx")
+const errorHandler = require("./middlewares/errorHandler");
 
 const app = express()
 const upload = multer()
-console.log("🚀 File main.js berhasil dieksekusi sampai atas")
 
 app.use((req, res, next) => {
-  console.log("➡️  Request masuk:", req.method, req.url)
+  console.log("📥 Request masuk:", req.method, req.originalUrl)
+  res.on("finish", () => {
+    console.log("📤 Response terkirim:", res.statusCode)
+  })
   next()
 })
+
+process.on("unhandledRejection", (reason) => {
+  console.error("⚠️ UNHANDLED PROMISE REJECTION:", reason)
+})
+
+process.on("uncaughtException", (err) => {
+  console.error("💥 UNCAUGHT EXCEPTION:", err)
+  process.exit(1)
+})
+
+app.use(express.json({ limit: "10mb", strict: false }))
+app.use(express.urlencoded({ extended: true }))
 
 // =========================
 // 🛢️ Database
@@ -40,6 +55,11 @@ db.raw("SELECT 1")
     process.exit(1)
   })
 
+  app.use((req, res, next) => {
+  console.log("📡 Request masuk:", req.method, req.url)
+  next()
+})
+
 // =========================
 // ⚙️ Middlewares
 // =========================
@@ -54,20 +74,21 @@ app.use(
 )
 app.use(cookieParser())
 app.use(express.json())
-app.use(
-  helmet({
-    crossOriginOpenerPolicy: false,
-    crossOriginResourcePolicy: false,
-    contentSecurityPolicy: false,
-    originAgentCluster: false,
-  })
-)
+// app.use(
+//   helmet({
+//     crossOriginOpenerPolicy: false,
+//     crossOriginResourcePolicy: false,
+//     contentSecurityPolicy: false,
+//     originAgentCluster: false,
+//   })
+// )
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 300,
   })
 )
+
 
 // =========================
 // 🔐 Middlewares
@@ -85,6 +106,7 @@ const spendingRoutes = require("./moduls/spending")
 app.use("/", userRoutes)
 app.use("/api", verifyToken, incomeRoutes)
 app.use("/api", verifyToken, spendingRoutes)
+
 // app.use("/api", verifyToken, contentRoutes)
 
 // =========================
@@ -106,6 +128,8 @@ app.use((req, res) => {
   })
 })
 
+app.use(errorHandler)
+
 // =========================
 // 🚀 Start Server
 // =========================
@@ -113,5 +137,4 @@ const PORT = process.env.PORT || 3100
 app.listen(PORT, "127.0.0.1", () => {
   console.log(`✅ Server jalan di http://127.0.0.1:${PORT}`)
 })
-console.log("🚀 Sampai bawah nih, app.listen dieksekusi")
 module.exports = app

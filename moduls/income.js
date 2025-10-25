@@ -8,7 +8,7 @@
   const { verifyToken, isAdmin } = require("../middlewares/verifyToken")
 
   // ✅ GET: Semua income berdasarkan tahun
-  router.get("/income/:year", async (req, res) => {
+  router.get("/income/:year", async (req, res, next) => {
     try {
       const year = req.params.year
       const results = await knex("detail_income")
@@ -18,37 +18,34 @@
 
       res.status(200).json(results)
     } catch (err) {
-      console.error("Error GET /api/income/:year:", err)
-      res.status(500).json({ error: err.message })
+      next(err)
     }
   })
 
   // ✅ GET: Semua income (tanpa filter)
-  router.get("/income", async (req, res) => {
+  router.get("/income", async (req, res, next) => {
     try {
       const results = await knex("detail_income")
         .select("*")
         .orderBy("date_income", "desc")
       res.status(200).json(results)
     } catch (err) {
-      console.error("Error GET /api/income:", err)
-      res.status(500).json({ error: err.message })
+      next(err)
     }
   })
 
   // ✅ GET: Semua kategori income (public)
-  router.get("/categoryIncome", async (req, res) => {
+  router.get("/categoryIncome", async (req, res, next) => {
     try {
       const results = await knex("category_income").select("*").orderBy("id", "asc")
       res.status(200).json(results)
     } catch (err) {
-      console.error("Error GET /api/categoryIncome:", err)
-      res.status(500).json({ error: err.message })
+      next(err)
     }
   })
 
   // ✅ POST: Filter income by kategori + tahun
-  router.post("/incomeCategoryYear", async (req, res) => {
+  router.post("/incomeCategoryYear", async (req, res, next) => {
     try {
       const { category_id, year } = req.body
 
@@ -65,13 +62,12 @@
 
       res.status(200).json(results)
     } catch (err) {
-      console.error("Error POST /api/incomeCategoryYear:", err)
-      res.status(500).send("Internal Server Error!")
+      next(err)
     }
   })
 
   // ✅ POST: Filter income by kategori + bulan + tahun
-  router.post("/incomeDetail", async (req, res) => {
+  router.post("/incomeDetail", async (req, res, next) => {
     try {
       const { category_id, month, year } = req.body
 
@@ -89,13 +85,12 @@
 
       res.status(200).json(results)
     } catch (err) {
-      console.error("Error POST /api/incomeDetail:", err)
-      res.status(500).send("Internal Server Error!")
+      next(err)
     }
   })
 
   // ✅ POST: Input data income baru (🧠 hanya user login)
-  router.post("/inputIncomeDetail", verifyToken, async (req, res) => {
+  router.post("/inputIncomeDetail", verifyToken, async (req, res, next) => {
     try {
       const { name_income, amount_income, category_id, date_income } = req.body
 
@@ -117,13 +112,12 @@
 
       res.status(200).json({ message: "✅ Income inserted successfully", result })
     } catch (err) {
-      console.error("Error POST /api/inputIncomeDetail:", err)
-      res.status(500).send("Internal Server Error!")
+      next(err)
     }
   })
 
   // ✅ POST: Tambah kategori income baru (🧠 admin only)
-  router.post("/inputCategoryIncome", verifyToken, isAdmin, async (req, res) => {
+  router.post("/inputCategoryIncome", verifyToken, isAdmin, async (req, res, next) => {
     try {
       const { name_category } = req.body
       if (!name_category) {
@@ -137,13 +131,12 @@
 
       res.status(200).json({ message: "✅ Category added successfully", result })
     } catch (err) {
-      console.error("Error POST /api/inputCategoryIncome:", err)
-      res.status(500).send("Internal Server Error!")
+      next(err)
     }
   })
 
   // ✅ POST: Upload income Excel (🧠 hanya user login)
-  router.post("/uploadIncomeExcel", verifyToken, upload.single("file"), async (req, res) => {
+  router.post("/uploadIncomeExcel", verifyToken, upload.single("file"), async (req, res, next) => {
     try {
       if (!req.file) return res.status(400).send("❌ Tidak ada file yang diupload.")
 
@@ -178,8 +171,7 @@
         inserted: parsedData.length,
       })
     } catch (err) {
-      console.error("❌ Upload Excel Error:", err)
-      res.status(500).send("Internal Server Error")
+      next(err)
     }
   })
 

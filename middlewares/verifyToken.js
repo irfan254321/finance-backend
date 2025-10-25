@@ -3,24 +3,27 @@ const jwt = require("jsonwebtoken")
 
 
 function verifyToken(req, res, next) {
-  console.log("🔍 verifyToken masuk:", req.method, req.originalUrl)
-  const token = req.cookies.token
-  if (!token) {
-    console.log("❌ Tidak ada token, stop di sini")
-    return res.status(403).json({ message: "No token provided" })
-  }
-
-  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-    if (err) {
-      console.log("❌ Token invalid:", err.message)
-      return res.status(401).json({ message: "Invalid or expired token" })
+  try {
+    if (!req.cookies) {
+      return res.status(400).json({ message: "Cookie parser error" })
     }
-    console.log("✅ Token valid untuk user:", decoded.username)
-    req.user = decoded
-    next()
-  })
-}
 
+    const token = req.cookies.token
+    if (!token) {
+      return res.status(403).json({ message: "No token provided" })
+    }
+
+    jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+      if (err) {
+        return res.status(401).json({ message: "Invalid or expired token" })
+      }
+      req.user = decoded
+      next()
+    })
+  } catch (err) {
+    next(err) // biar dilempar ke errorHandler
+  }
+}
 
 function isAdmin(req, res, next) {
   if (req.user.role !== "admin") {
