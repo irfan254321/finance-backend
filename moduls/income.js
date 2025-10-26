@@ -44,6 +44,8 @@
     }
   })
 
+
+
   // ✅ POST: Filter income by kategori + tahun
   router.post("/incomeCategoryYear", async (req, res, next) => {
     try {
@@ -175,5 +177,53 @@
     }
   })
 
-  console.log("✅ Module income.js loaded: /api/income aktif")
-  module.exports = router
+  // ✅ PUT: Update income
+router.put("/detailIncome/:id", verifyToken, async (req, res, next) => {
+  try {
+    const { id } = req.params
+    let { name_income, amount_income, category_id, date_income } = req.body
+
+    // 💡 pastikan format YYYY-MM-DD saja
+    if (date_income && date_income.includes("T")) {
+      date_income = date_income.split("T")[0]
+    }
+
+    await knex("detail_income")
+      .where({ id })
+      .update({ name_income, amount_income, category_id, date_income })
+
+    res.status(200).json({ message: "✅ Income updated" })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// ✅ DELETE: Hapus income
+router.delete("/detailIncome/:id", verifyToken, async (req, res, next) => {
+  try {
+    const { id } = req.params
+    await knex("detail_income").where({ id }).del()
+    res.status(200).json({ message: "🗑️ Income deleted" })
+  } catch (err) { next(err) }
+})
+
+// ✅ PUT: Update kategori income
+router.put("/categoryIncome/:id", verifyToken, isAdmin, async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const { name_category } = req.body
+    await knex("category_income").where({ id }).update({ name_category })
+    res.status(200).json({ message: "✅ Kategori income updated" })
+  } catch (err) { next(err) }
+})
+
+// ✅ DELETE: Hapus kategori income
+router.delete("/categoryIncome/:id", verifyToken, isAdmin, async (req, res, next) => {
+  try {
+    const { id } = req.params
+    await knex("category_income").where({ id }).del()
+    res.status(200).json({ message: "🗑️ Kategori income deleted" })
+  } catch (err) { next(err) }
+})
+
+module.exports = router
