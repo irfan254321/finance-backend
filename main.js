@@ -11,7 +11,7 @@ const multer = require("multer")
 const errorHandler = require("./middlewares/errorHandler")
 
 // 🛢️ Koneksi database global
-const db = require("./db/knex")
+const db = require("./src/db/knex")
 global.knex = db
 
 const app = express()
