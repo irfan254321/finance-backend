@@ -8,6 +8,17 @@ const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
 const { verifyToken, isAdmin } = require("../../middlewares/verifyToken")
 
+
+function getClientIp(req) {
+  // jika server ada di belakang proxy (heroku/nginx/load balancer) pastikan `app.set('trust proxy', true)` di express app
+  const forwarded = req.headers["x-forwarded-for"]
+  if (forwarded) {
+    // bisa berisi daftar ip `client, proxy1, proxy2`
+    return forwarded.split(",")[0].trim()
+  }
+  return req.ip || req.connection?.remoteAddress || null
+}
+
 // ================================
 // 📝 REGISTER (Admin only, optional open register user biasa)
 // ================================
@@ -75,6 +86,15 @@ router.post("/login", async (req, res, next) => {
       })
     }
 
+    const ip = getClientIp(req)
+
+     await knex("login_users").where({ id: user.id }).update({
+      token,
+      ip_address: ip,
+      last_login: knex.fn.now(),
+      updated_at: knex.fn.now(),
+    })
+
     const user = await knex("login_users").where({ username }).first()
     if (!user) {
       return res.status(404).json({
@@ -100,8 +120,8 @@ router.post("/login", async (req, res, next) => {
 
     res.cookie("token", token, {
       httpOnly: true,
-      sameSite: "lax",
-      secure: false,
+      sameSite: "none",
+      secure: true,
       path: "/",
       maxAge: 24 * 60 * 60 * 1000,
     })
