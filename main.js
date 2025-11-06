@@ -1,4 +1,3 @@
-require("dotenv").config()
 const express = require("express")
 const cors = require("cors")
 const helmet = require("helmet")
@@ -8,9 +7,13 @@ const multer = require("multer")
 const knex = require("knex")
 const xlsx = require("xlsx")
 const errorHandler = require("./middlewares/errorHandler");
+const path = require("path")
+const dotenv = require("dotenv")
 
 const app = express()
 const upload = multer()
+
+app.set("trust proxy", 1)
 
 app.use((req, res, next) => {
   console.log("📥 Request masuk:", req.method, req.originalUrl)
@@ -32,19 +35,28 @@ process.on("uncaughtException", (err) => {
 app.use(express.json({ limit: "10mb", strict: false }))
 app.use(express.urlencoded({ extended: true }))
 
+const envFile = process.env.NODE_ENV === "production" ? ".env.prod" : ".env.dev"
+dotenv.config({ path: path.resolve(__dirname, envFile) })
+
+console.log(`🌱 Loaded environment: ${process.env.NODE_ENV} (${envFile})`)
+
 // =========================
 // 🛢️ Database
 // =========================
 const db = knex({
   client: "mysql2",
   connection: {
-    host: process.env.host,
-    user: process.env.user,
-    password: process.env.password,
-    database: process.env.database,
+    host: process.env.DB_HOST || "127.0.0.1",
+    user: process.env.DB_USER || "finance_irfan",
+    password: process.env.DB_PASSWORD || "Handsome27",
+    database: process.env.DB_NAME || "finance",
+    port: process.env.DB_PORT || 3306,
+    ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: true } : false,
     timezone: "Z",
   },
 })
+
+
 
 global.knex = db;
 
@@ -65,13 +77,17 @@ db.raw("SELECT 1")
 // =========================
 app.use(
   cors({
-    origin:
-      process.env.NODE_ENV === "production"
-        ? "https://finance.rsbhayangkara.id"
-        : "http://127.0.0.1:3000",
+    origin: [
+      "http://127.0.0.1:3000",
+      "http://localhost:3000",
+      "https://app.portofolioirfan.com",
+      "http://localhost:3002",
+      "http://127.0.0.1:3002",
+    ],
     credentials: true,
   })
 )
+
 app.use(cookieParser())
 app.use(express.json())
 // app.use(
@@ -134,7 +150,9 @@ app.use(errorHandler)
 // 🚀 Start Server
 // =========================
 const PORT = process.env.PORT || 3100
-app.listen(PORT, "127.0.0.1", () => {
-  console.log(`✅ Server jalan di http://127.0.0.1:${PORT}`)
+const HOST = process.env.HOST || "0.0.0.0"
+
+app.listen(PORT, HOST, () => {
+  console.log(`🚀 Backend running on http://${HOST}:${PORT}`)
 })
 module.exports = app
