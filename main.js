@@ -7,15 +7,13 @@ const express = require("express")
 const cors = require("cors")
 const rateLimit = require("express-rate-limit")
 const cookieParser = require("cookie-parser")
-const multer = require("multer")
 const errorHandler = require("./middlewares/errorHandler")
 
 // 🛢️ Koneksi database global
-const db = require("./db/knex")
+const db = require("./src/db/knex")
 global.knex = db
 
 const app = express()
-const upload = multer()
 
 // 🌍 Trust proxy (Cloudflare, Nginx, dll.)
 app.set("trust proxy", 1)
@@ -27,7 +25,6 @@ app.use(cookieParser())
 
 // 🧩 Logger sederhana
 app.use((req, res, next) => {
-  console.log("📥 Request masuk:", req.method, req.originalUrl)
   res.on("finish", () =>
     console.log("📤 Response terkirim:", res.statusCode)
   )

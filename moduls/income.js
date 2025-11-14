@@ -5,7 +5,10 @@
   const router = express.Router()
   const XLSX = require("xlsx")
   const upload = require("../middlewares/uploads")
-  const { verifyToken, isAdmin } = require("../middlewares/verifyToken")
+  const {
+    verifyToken,
+    isAdmin
+  } = require("../middlewares/verifyToken")
 
   // ✅ GET: Semua income berdasarkan tahun
   router.get("/income/:year", async (req, res, next) => {
@@ -49,7 +52,10 @@
   // ✅ POST: Filter income by kategori + tahun
   router.post("/incomeCategoryYear", async (req, res, next) => {
     try {
-      const { category_id, year } = req.body
+      const {
+        category_id,
+        year
+      } = req.body
 
       if (!category_id || !year) {
         return res.status(400).send("Category ID or Year is Undefined!")
@@ -71,7 +77,11 @@
   // ✅ POST: Filter income by kategori + bulan + tahun
   router.post("/incomeDetail", async (req, res, next) => {
     try {
-      const { category_id, month, year } = req.body
+      const {
+        category_id,
+        month,
+        year
+      } = req.body
 
       if (!category_id || !month || !year) {
         return res.status(400).send("Category ID or Month or Year is Undefined!")
@@ -94,7 +104,12 @@
   // ✅ POST: Input data income baru (🧠 hanya user login)
   router.post("/inputIncomeDetail", verifyToken, async (req, res, next) => {
     try {
-      const { name_income, amount_income, category_id, date_income } = req.body
+      const {
+        name_income,
+        amount_income,
+        category_id,
+        date_income
+      } = req.body
 
       if (!name_income || !amount_income || !category_id || !date_income) {
         return res.status(400).send("All fields are required!")
@@ -112,7 +127,10 @@
         created_by: req.user.id, // ← ambil ID user dari cookie JWT
       })
 
-      res.status(200).json({ message: "✅ Income inserted successfully", result })
+      res.status(200).json({
+        message: "✅ Income inserted successfully",
+        result
+      })
     } catch (err) {
       next(err)
     }
@@ -121,7 +139,9 @@
   // ✅ POST: Tambah kategori income baru (🧠 admin only)
   router.post("/inputCategoryIncome", verifyToken, isAdmin, async (req, res, next) => {
     try {
-      const { name_category } = req.body
+      const {
+        name_category
+      } = req.body
       if (!name_category) {
         return res.status(400).send("Name Category is required!")
       }
@@ -131,99 +151,148 @@
         created_by: req.user.id,
       })
 
-      res.status(200).json({ message: "✅ Category added successfully", result })
+      res.status(200).json({
+        message: "✅ Category added successfully",
+        result
+      })
     } catch (err) {
       next(err)
     }
   })
 
   // ✅ POST: Upload income Excel (🧠 hanya user login)
-  router.post("/uploadIncomeExcel", verifyToken, upload.single("file"), async (req, res, next) => {
+  router.post("/uploadIncomeExcel", verifyToken, async (req, res, next) => {
     try {
-      if (!req.file) return res.status(400).send("❌ Tidak ada file yang diupload.")
+      const {
+        rows
+      } = req.body
 
-      const workbook = XLSX.read(req.file.buffer, { type: "buffer" })
-      const sheetName = workbook.SheetNames[0]
-      const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName])
-
-      if (!data.length) return res.status(400).send("❌ File kosong atau tidak valid.")
-
-      const requiredCols = ["name_income", "amount_income", "category_id", "date_income"]
-      const invalid = data.find(row => !requiredCols.every(c => c in row))
-      if (invalid) {
-        return res.status(400).send("❌ Kolom Excel tidak sesuai. Harus ada: name_income, amount_income, category_id, date_income")
+      if (!rows || !Array.isArray(rows) || rows.length === 0) {
+        return res.status(400).json({
+          message: "❌ Tidak ada data untuk diupload."
+        })
       }
 
-      const parsedData = data.map(row => {
-        let dateValue = row.date_income
-        if (typeof dateValue === "number") {
-          dateValue = XLSX.SSF.format("yyyy-mm-dd", dateValue)
-        }
-        return {
-          ...row,
-          date_income: dateValue,
-          created_by: req.user.id, // ← user login dari token
-        }
-      })
+      // Pastikan semua row lengkap
+      const requiredCols = ["name_income", "amount_income", "category_id", "date_income"]
 
-      await knex("detail_income").insert(parsedData)
+      for (const row of rows) {
+        const valid = requiredCols.every((c) => c in row && row[c] !== null && row[c] !== "")
+        if (!valid)
+          return res.status(400).json({
+            message: "❌ Data tidak lengkap. Pastikan semua kolom terisi."
+          })
+      }
+
+      // Tambahkan created_by
+      const parsed = rows.map(r => ({
+        ...r,
+        created_by: req.user.id
+      }))
+
+      await knex("detail_income").insert(parsed)
 
       res.status(200).json({
-        message: "✅ Data Excel berhasil diimport!",
-        inserted: parsedData.length,
+        message: "✅ Data berhasil dimasukkan!",
+        inserted: parsed.length
       })
     } catch (err) {
       next(err)
     }
   })
 
+
   // ✅ PUT: Update income
-router.put("/detailIncome/:id", verifyToken, async (req, res, next) => {
-  try {
-    const { id } = req.params
-    let { name_income, amount_income, category_id, date_income } = req.body
+  router.put("/detailIncome/:id", verifyToken, async (req, res, next) => {
+    try {
+      const {
+        id
+      } = req.params
+      let {
+        name_income,
+        amount_income,
+        category_id,
+        date_income
+      } = req.body
 
-    // 💡 pastikan format YYYY-MM-DD saja
-    if (date_income && date_income.includes("T")) {
-      date_income = date_income.split("T")[0]
+      // 💡 pastikan format YYYY-MM-DD saja
+      if (date_income && date_income.includes("T")) {
+        date_income = date_income.split("T")[0]
+      }
+
+      await knex("detail_income")
+        .where({
+          id
+        })
+        .update({
+          name_income,
+          amount_income,
+          category_id,
+          date_income
+        })
+
+      res.status(200).json({
+        message: "✅ Income updated"
+      })
+    } catch (err) {
+      next(err)
     }
+  })
 
-    await knex("detail_income")
-      .where({ id })
-      .update({ name_income, amount_income, category_id, date_income })
+  // ✅ DELETE: Hapus income
+  router.delete("/detailIncome/:id", verifyToken, async (req, res, next) => {
+    try {
+      const {
+        id
+      } = req.params
+      await knex("detail_income").where({
+        id
+      }).del()
+      res.status(200).json({
+        message: "🗑️ Income deleted"
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
 
-    res.status(200).json({ message: "✅ Income updated" })
-  } catch (err) {
-    next(err)
-  }
-})
+  // ✅ PUT: Update kategori income
+  router.put("/categoryIncome/:id", verifyToken, isAdmin, async (req, res, next) => {
+    try {
+      const {
+        id
+      } = req.params
+      const {
+        name_category
+      } = req.body
+      await knex("category_income").where({
+        id
+      }).update({
+        name_category
+      })
+      res.status(200).json({
+        message: "✅ Kategori income updated"
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
 
-// ✅ DELETE: Hapus income
-router.delete("/detailIncome/:id", verifyToken, async (req, res, next) => {
-  try {
-    const { id } = req.params
-    await knex("detail_income").where({ id }).del()
-    res.status(200).json({ message: "🗑️ Income deleted" })
-  } catch (err) { next(err) }
-})
+  // ✅ DELETE: Hapus kategori income
+  router.delete("/categoryIncome/:id", verifyToken, isAdmin, async (req, res, next) => {
+    try {
+      const {
+        id
+      } = req.params
+      await knex("category_income").where({
+        id
+      }).del()
+      res.status(200).json({
+        message: "🗑️ Kategori income deleted"
+      })
+    } catch (err) {
+      next(err)
+    }
+  })
 
-// ✅ PUT: Update kategori income
-router.put("/categoryIncome/:id", verifyToken, isAdmin, async (req, res, next) => {
-  try {
-    const { id } = req.params
-    const { name_category } = req.body
-    await knex("category_income").where({ id }).update({ name_category })
-    res.status(200).json({ message: "✅ Kategori income updated" })
-  } catch (err) { next(err) }
-})
-
-// ✅ DELETE: Hapus kategori income
-router.delete("/categoryIncome/:id", verifyToken, isAdmin, async (req, res, next) => {
-  try {
-    const { id } = req.params
-    await knex("category_income").where({ id }).del()
-    res.status(200).json({ message: "🗑️ Kategori income deleted" })
-  } catch (err) { next(err) }
-})
-
-module.exports = router
+  module.exports = router
