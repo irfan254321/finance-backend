@@ -5,6 +5,7 @@ const express = require("express")
 const router = express.Router()
 const XLSX = require("xlsx")
 const upload = require("../middlewares/uploads")
+const { verifyToken } = require("../middlewares/verifyToken")
 
 function excelDateToJSDate(serial) {
   if (!serial || isNaN(serial)) return serial
@@ -209,186 +210,122 @@ router.post("/inputSpendingDetail", async (req, res, next) => {
 // ==========================================
 // 📤 POST: Upload spending Excel (login required)
 // ==========================================
-router.post("/uploadSpendingExcelGeneral", upload.single("file"), async (req, res, next) => {
+router.post("/uploadSpendingExcelGeneral", verifyToken, async (req, res, next) => {
   try {
-    if (!req.file) return res.status(400).send("No file uploaded")
-
-    const wb = XLSX.read(req.file.buffer, { type: "buffer" })
-    const sheet = wb.SheetNames[0]
-    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheet])
+    const { rows } = req.body
     const userId = req.user.id
-    let inserted_spending = 0
 
-    for (const r of rows) {
-      const name_spending = String(r.name_spending || "").trim()
-      const category_id = Number(r.category_id)
-      let date_spending = r.date_spending
-      
-        if (!r.date_spending) {
-            const now = new Date()
-            const year = now.getFullYear()
-            const month = String(now.getMonth() + 1).padStart(2, "0")
-            const daysInMonth = new Date(year, month, 0).getDate()
-            date_spending = `${year}-${month}-${String(daysInMonth).padStart(2, "0")}`
-          } else {
-            date_spending = excelDateToJSDate(r.date_spending)
-          }
-
-      if (typeof date_spending === "number") date_spending = excelDateToJSDate(date_spending)
-      const amount_spending = Number(String(r.amount_spending || "0").replace(/[^0-9]/g, ""))
-
-      if (!name_spending || !category_id || !date_spending || !amount_spending) continue
-
-      await knex("detail_spending").insert({
-        name_spending,
-        category_id,
-        amount_spending,
-        date_spending,
-        created_by: userId,
-        created_at: knex.fn.now(),
-      })
-      inserted_spending++
+    if (!rows || !Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ message: "❌ Tidak ada data yang dikirim" })
     }
 
+    // VALIDASI LENGKAP
+    const required = ["name_spending", "amount_spending", "category_id", "date_spending"]
+
+    for (const r of rows) {
+      const ok = required.every(k => k in r && r[k] !== null && r[k] !== "")
+      if (!ok) {
+        return res.status(400).json({ message: "❌ Format data tidak lengkap" })
+      }
+    }
+
+    // TAMBAHKAN created_by
+    const finalRows = rows.map(r => ({
+      ...r,
+      created_by: userId,
+      created_at: knex.fn.now(),
+    }))
+
+    await knex("detail_spending").insert(finalRows)
+
     res.status(200).json({
-      message: "✅ Excel spending umum berhasil diimport",
-      inserted_spending,
+      message: "✅ Spending umum berhasil diimport",
+      inserted_spending: finalRows.length
     })
   } catch (err) {
     next(err)
   }
 })
 
-// ==========================================
-// 📤 POST: Upload spending OBAT (login required)
-// ==========================================
-router.post("/uploadSpendingExcelObat", upload.single("file"), async (req, res, next) => {
-  try {
-    if (!req.file) return res.status(400).send("No file uploaded")
-    const wb = XLSX.read(req.file.buffer, { type: "buffer", cellDates: true })
-    const sheet = wb.SheetNames[0]
-    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheet])
-    const userId = req.user.id
-
-    const toNum = (v) => Number(String(v ?? "").replace(/[^0-9.-]/g, "")) || 0
-    const excelSerialToYMD = (serial) => {
-      const utcDays = Math.floor(serial - 25569)
-      const date = new Date(utcDays * 86400 * 1000)
-      return date.toISOString().slice(0, 10)
-    }
-    const normalizeDate = (d) => {
-      if (!d && d !== 0) return ""
-      if (d instanceof Date && !isNaN(d.getTime())) return d.toISOString().slice(0, 10)
-      if (typeof d === "number") return excelSerialToYMD(d)
-      if (typeof d === "string") {
-        const s = d.trim()
-        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-        const m = s.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/)
-        if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`
-        const t = new Date(s)
-        if (!isNaN(t.getTime())) return t.toISOString().slice(0, 10)
-      }
-      return String(d)
-    }
-
-    const grouped = {}
-    for (const r of rows) {
-      if (Number(r.category_id) !== 9) continue
-      const normDate = normalizeDate(r.date_spending)
-      const d = new Date(normDate)
-      const monthYear = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
-      const key = `${r.name_spending}_${monthYear}_${r.company_id}`
-      if (!grouped[key]) grouped[key] = []
-      grouped[key].push(r)
-    }
-
-    let inserted_spending = 0
-    let inserted_medicines = 0
-
-    await knex.transaction(async (trx) => {
-      for (const [key, meds] of Object.entries(grouped)) {
-        const { name_spending, company_id } = meds[0]
-        const firstDate = normalizeDate(meds[0].date_spending)
-        const d = new Date(firstDate)
-        const year = d.getFullYear()
-        const month = String(d.getMonth() + 1).padStart(2, "0")
-        const daysInMonth = new Date(year, Number(month), 0).getDate()
-        const date_spending = `${year}-${month}-${String(daysInMonth).padStart(2, "0")}`
-        const totalAmount = meds.reduce((sum, m) => sum + toNum(m.price_per_item), 0)
-
-        const [spendingId] = await trx("detail_spending").insert({
-          name_spending: String(name_spending || "").trim(),
-          category_id: 9,
-          company_id: toNum(company_id),
-          date_spending,
-          amount_spending: totalAmount,
-          created_by: userId,
-          created_at: trx.fn.now(),
-        })
-
-        inserted_spending++
-
-        for (const m of meds) {
-          const name_medicine = String(m.name_medicine || "").trim()
-          const quantity = toNum(m.quantity)
-          const unitId = toNum(m.unit_id)
-          const pricePerItem = toNum(m.price_per_item)
-          if (!name_medicine || !quantity || !unitId || !pricePerItem) continue
-
-          await trx("detail_medicine_spending").insert({
-            detail_spending_id: spendingId,
-            name_medicine,
-            quantity,
-            name_unit_id: unitId,
-            price_per_item: pricePerItem,
-            created_by: userId,
-            created_at: trx.fn.now(),
-          })
-          inserted_medicines++
-        }
-      }
-    })
-
-    res.status(200).json({
-      message: "✅ Excel spending obat berhasil diimport",
-      inserted_spending,
-      inserted_medicines,
-    })
-  } catch (err) {
-    next(err)
-  }
-})
 
 // ==========================================
 // 💊 POST: Ambil detail obat berdasarkan spending_id
 // ==========================================
 // 💊 GET detail obat by spending_id (final fix)
-router.post("/spendingMedicineBySpendingId", async (req, res, next) => {
+
+function excelDateToIso(date) {
+  if (!date) return null
+
+  if (typeof date === "number") {
+    const d = new Date((date - 25569) * 86400 * 1000)
+    return d.toISOString().slice(0, 10)
+  }
+
+  if (typeof date === "string" && date.includes("/")) {
+    const [day, month, year] = date.split("/")
+    return `${year}-${month.padStart(2,"0")}-${day.padStart(2,"0")}`
+  }
+
+  return date
+}
+
+// ==========================================
+// 📤 POST: Upload spending OBAT (JSON GROUPED, FINAL VERSION)
+// ==========================================
+router.post("/uploadSpendingExcelObat", verifyToken, async (req, res, next) => {
   try {
-    const { detail_spending_id } = req.body
-    if (!detail_spending_id)
-      return res.status(400).json({ error: "detail_spending_id is required" })
+    const { data } = req.body
+    const userId = req.user.id
 
-    const medicines = await knex("detail_medicine_spending as dms")
-      .select(
-        "dms.id",
-        "dms.detail_spending_id",
-        "dms.name_medicine",
-        "dms.quantity",
-        "dms.name_unit_id",
-        "u.name_unit",
-        "dms.price_per_item", // 🟨 ini yang sebelumnya hilang
-        "dms.created_at"
-      )
-      .leftJoin("unit_medicine as u", "dms.name_unit_id", "u.id")
-      .where("dms.detail_spending_id", detail_spending_id)
-      .orderBy("dms.name_medicine", "asc")
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      return res.status(400).json({ message: "Tidak ada data" })
+    }
 
-    res.status(200).json(medicines)
+    await knex.transaction(async (trx) => {
+      for (const group of data) {
+        // HITUNG TOTAL HARGA OBAT
+        const totalAmount = group.items.reduce(
+          (sum, item) => sum + Number(item.price_per_item || 0),
+          0
+        )
+
+        // INSERT KE detail_spending
+        const [spendingId] = await trx("detail_spending")
+          .insert({
+            name_spending: group.name_spending,
+            category_id: 9,
+            company_id: group.company_id,
+            date_spending: group.date_spending,
+            amount_spending: totalAmount,
+            created_by: userId,
+            created_at: trx.fn.now(),
+          })
+          .returning("id")
+
+        const sid = Array.isArray(spendingId) ? spendingId.id : spendingId
+
+        // INSERT OBAT
+        const medsPayload = group.items.map((item) => ({
+          detail_spending_id: sid,
+          name_medicine: item.name_medicine,
+          quantity: Number(item.quantity),
+          name_unit_id: Number(item.unit_id),
+          price_per_item: Number(item.price_per_item || 0),
+          created_by: userId,
+          created_at: trx.fn.now(),
+        }))
+
+        await trx("detail_medicine_spending").insert(medsPayload)
+      }
+    })
+
+    res.json({ message: "Sukses import obat dengan JSON" })
   } catch (err) {
     next(err)
   }
 })
+
+
 
 router.post("/inputCompanyMedicine", async (req, res, next) => {
   try {

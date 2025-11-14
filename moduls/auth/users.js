@@ -86,15 +86,6 @@ router.post("/login", async (req, res, next) => {
       })
     }
 
-    const ip = getClientIp(req)
-
-     await knex("login_users").where({ id: user.id }).update({
-      token,
-      ip_address: ip,
-      last_login: knex.fn.now(),
-      updated_at: knex.fn.now(),
-    })
-
     const user = await knex("login_users").where({ username }).first()
     if (!user) {
       return res.status(404).json({
@@ -118,12 +109,21 @@ router.post("/login", async (req, res, next) => {
       { expiresIn: "1d" }
     )
 
+
     res.cookie("token", token, {
       httpOnly: true,
-      sameSite: "none",
-      secure: true,
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      secure: process.env.NODE_ENV === "production", // hanya true di production
       path: "/",
       maxAge: 24 * 60 * 60 * 1000,
+    })
+    
+    const ip = getClientIp(req)
+    await knex("login_users").where({ id: user.id }).update({
+      token,
+      ip_address: ip,
+      last_login: knex.fn.now(),
+      updated_at: knex.fn.now(),
     })
 
     console.log("✅ Sending cookie:", token.slice(0, 20) + "...")
@@ -138,6 +138,8 @@ router.post("/login", async (req, res, next) => {
         role: user.role,
       },
     })
+
+    
   } catch (err) {
     next(err)
   }

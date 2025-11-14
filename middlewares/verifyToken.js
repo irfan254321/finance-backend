@@ -1,6 +1,6 @@
 // middlewares/verifyToken.js
 const jwt = require("jsonwebtoken")
-const knex = require("../db") // ⬅️ pastiin path ini sesuai struktur proyek lo
+const knex = require("../src/db/knex") // ⬅️ pastiin path ini sesuai struktur proyek lo
 
 function getClientIp(req) {
   const forwarded = req.headers["x-forwarded-for"]
