@@ -19,8 +19,13 @@ const app = express()
 app.set("trust proxy", 1)
 
 // 📦 Global middleware
-app.use(express.json({ limit: "10mb", strict: false }))
-app.use(express.urlencoded({ extended: true }))
+app.use(express.json({
+  limit: "10mb",
+  strict: false
+}))
+app.use(express.urlencoded({
+  extended: true
+}))
 app.use(cookieParser())
 
 // 🧩 Logger sederhana
@@ -54,20 +59,26 @@ app.use(
 )
 
 // 🔐 Middleware custom
-const { verifyToken } = require("./middlewares/verifyToken")
+const {
+  verifyToken
+} = require("./middlewares/verifyToken")
 
 // 🧩 Routes
 const userRoutes = require("./moduls/auth/users")
 const incomeRoutes = require("./moduls/income")
 const spendingRoutes = require("./moduls/spending")
+const yearRoutes = require("./moduls/year")
 
 app.use("/", userRoutes)
 app.use("/api", verifyToken, incomeRoutes)
 app.use("/api", verifyToken, spendingRoutes)
+app.use("/api", verifyToken, yearRoutes)
 
 // 🩺 Default route
 app.get("/", (req, res) => {
-  res.status(200).json({ message: "🚀 Backend API running..." })
+  res.status(200).json({
+    message: "🚀 Backend API running..."
+  })
 })
 
 // ❌ 404 handler
