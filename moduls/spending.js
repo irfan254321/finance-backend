@@ -506,29 +506,67 @@ router.delete("/unitMedicine/:id", async (req, res, next) => {
 // POST (sudah ada): /inputSpendingDetail
 
 // PUT detailSpending
+function fixDate(d) {
+  if (!d) return null;
+  // Jika format sudah YYYY-MM-DD, langsung return
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  // Jika ISO format, ambil tanggalnya saja
+  return d.split("T")[0];
+}
+
 router.put("/detailSpending/:id", async (req, res, next) => {
   try {
-    const { id } = req.params
-    const { name_spending, amount_spending, category_id, date_spending, company_id } = req.body
+    const { id } = req.params;
+    const {
+      name_spending,
+      amount_spending,
+      category_id,
+      date_spending,
+      company_id,
+    } = req.body;
 
     if (!name_spending || !category_id || !date_spending)
-      return res.status(400).send("Incomplete payload")
+      return res.status(400).send("Incomplete payload");
 
-    const isObat = Number(category_id) === 9
+    // Ambil data awal
+    const existing = await knex("detail_spending").where({ id }).first();
+    if (!existing) return res.status(404).send("Spending tidak ditemukan");
+
+    // RULE: Tidak boleh pindah kategori kesehatan ↔ non-kesehatan
+    if (existing.category_id === 9 && Number(category_id) !== 9) {
+      return res.status(400).send("Transaksi kategori 9 tidak boleh dipindahkan ke kategori lain");
+    }
+
+    if (existing.category_id !== 9 && Number(category_id) === 9) {
+      return res.status(400).send("Transaksi non-kategori-9 tidak boleh dipindahkan ke kategori 9");
+    }
+
+    const isObat = Number(category_id) === 9;
+
     const payload = {
       name_spending,
       category_id: Number(category_id),
-      date_spending,
-      amount_spending: isObat ? null : Number(amount_spending || 0),
-      company_id: isObat ? (company_id ? Number(company_id) : null) : null,
+      date_spending: fixDate(date_spending),
       updated_at: knex.fn.now(),
+    };
+
+    if (!isObat) {
+      payload.amount_spending = Number(amount_spending || 0);
+    } else {
+      payload.company_id = company_id ? Number(company_id) : null;
     }
 
-    const updated = await knex("detail_spending").where({ id }).update(payload)
-    if (!updated) return res.status(404).send("Spending tidak ditemukan")
-    res.status(200).json({ message: "✅ Spending diupdate" })
-  } catch (err) { next(err) }
-})
+    if (!isObat) payload.company_id = null;
+
+    await knex("detail_spending").where({ id }).update(payload);
+
+    res.status(200).json({ message: "✅ Spending diupdate" });
+
+  } catch (err) {
+    next(err);
+  }
+});
+
 
 // DELETE detailSpending (sekalian hapus medicine-nya)
 router.delete("/detailSpending/:id", async (req, res, next) => {
@@ -617,6 +655,7 @@ router.post("/spendingMedicineBySpendingId", async (req, res, next) => {
         "dms.quantity",
         "dms.name_unit_id",
         "u.name_unit",
+        "dms.price_per_item",
         "dms.created_at"
       )
       .leftJoin("unit_medicine as u", "dms.name_unit_id", "u.id")
