@@ -288,4 +288,35 @@ router.put("/me/update", verifyToken, async (req, res, next) => {
   }
 })
 
+// ================================
+// 🛠️ UPDATE USER LAIN (Admin Only)
+// ================================
+router.put("/users/:id", verifyToken, isAdmin, async (req, res, next) => {
+  try {
+    const { name_users, username, password } = req.body
+    const { id } = req.params
+
+    const updateData = {
+      name_users,
+      username,
+      updated_at: knex.fn.now(),
+    }
+
+    if (password && password.trim() !== "") {
+      const hashed = await bcrypt.hash(password, 10)
+      updateData.password = hashed
+    }
+
+    await knex("login_users").where({ id }).update(updateData)
+
+    return res.status(200).json({
+      success: true,
+      message: "User updated",
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
+
 module.exports = router
