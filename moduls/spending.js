@@ -347,36 +347,6 @@ router.post("/inputCompanyMedicine", async (req, res, next) => {
   }
 })
 
-router.post("/inputCategorySpending", async (req, res, next) => {
-  try {
-    const { name_category } = req.body
-    const userId = req.user?.id || null // kalau pakai verifyToken global, ini aman
-
-    if (!name_category || !name_category.trim()) {
-      return res.status(400).json({ error: "Nama kategori wajib diisi" })
-    }
-
-    const existing = await knex("category_spending")
-      .where("name_category", name_category.trim())
-      .first()
-    if (existing) {
-      return res.status(400).json({ error: "Kategori sudah ada" })
-    }
-
-    const [inserted] = await knex("category_spending").insert({
-      name_category: name_category.trim(),
-      created_by: userId,
-      created_at: knex.fn.now(),
-    })
-
-    res.status(200).json({
-      message: "✅ Kategori spending baru berhasil disimpan!",
-      id: inserted,
-    })
-  } catch (err) {
-    next(err)
-  }
-})
 // --- helper konversi tanggal tetap yang kamu punya ---
 function excelDateToJSDate(serial) {
   if (!serial || isNaN(serial)) return serial
@@ -390,8 +360,37 @@ function excelDateToJSDate(serial) {
    ==== 1) CATEGORY CRUD ====
    ===========================*/
 
-// POST inputCategorySpending (sudah ada, biarkan)
-router.post("/inputCategorySpending", async (req, res, next) => { /* ...existing code kamu... */ })
+router.post("/inputCategorySpending", async (req, res, next) => {
+  try {
+      const { name_category } = req.body
+      const userId = req.user?.id || null // kalau pakai verifyToken global, ini aman
+
+      if (!name_category || !name_category.trim()) {
+        return res.status(400).json({ error: "Nama kategori wajib diisi" })
+      }
+
+      const existing = await knex("category_spending")
+        .where("name_category", name_category.trim())
+        .first()
+      if (existing) {
+        return res.status(400).json({ error: "Kategori sudah ada" })
+      }
+
+      const [inserted] = await knex("category_spending").insert({
+        name_category: name_category.trim(),
+        created_by: userId,
+        created_at: knex.fn.now(),
+      })
+
+      res.status(200).json({
+        message: "✅ Kategori spending baru berhasil disimpan!",
+        id: inserted,
+      })
+    } catch (err) {
+      next(err)
+  }
+})
+
 
 // PUT update category
 router.put("/categorySpending/:id", async (req, res, next) => {
